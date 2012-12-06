@@ -48,16 +48,16 @@ class BluetoothException(Exception):
 #	@author 	ManuelDeveloper (manueldeveloper@gmail.com)
 class Bluetooth():
 	
-	"""									Class attributes									"""
+	""" Class attributes """
 	
 	# BlueZ system bus attributes
-	_systemBus= 			None
-	_manager= 				None
+	_systemBus= None
+	_manager= None
 	
 	
 	
 	
-	"""									Class Builder									"""
+	""" Class Builder """
 	##
 	#	Builder of the class whose objective is check if the system has a bluetooth adapter and then, gets the reference to it
 	#
@@ -79,13 +79,14 @@ class Bluetooth():
 		try:
 			adapterReference= interfaceManager.DefaultAdapter()			
 			self.adapter= dbus.Interface(Bluetooth._systemBus.get_object('org.bluez', adapterReference), 'org.bluez.Adapter')
+			self.adapter.connect_to_signal('PropertyChanged', self.propertyListener)
 		except:
 			raise BluetoothException("The system does not have an bluetooth connection")
 			
 			
 			
 			
-	"""									General purpose methods									"""
+	""" General purpose methods """
 	##
 	#	Method which checks if the bluetooth adapter is On or Off
 	#	@retval True if the adapter is ON
@@ -101,3 +102,86 @@ class Bluetooth():
 			return True
 		else:
 			return False
+			
+	
+	##
+	#	Method which turns On/Off the bluetooth adapter
+	#	@param power Indicates if we want to turn On(True) or Off(False) the bluetooth adapter
+	#	@date 27/09/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)
+	def setPower(self, power):
+		
+		# Check the action
+		if power is True:
+			if self.getPower() is False:
+				self.adapter.SetProperty('Powered', power) # Turn On
+				self.propertyLoop= gobject.MainLoop()
+				self.propertyLoop.run()	
+				
+		elif power is False:
+			if self.getPower() is True:
+				self.adapter.SetProperty('Powered', power) # Turn Off
+				self.propertyLoop= gobject.MainLoop()
+				self.propertyLoop.run()
+	
+	
+	##
+	#	Method which checks if the bluetooth visibility is On or Off
+	#	@retval True if the bluetooth visibility is ON
+	#	@retval False if the bluetooth visibility if OFF
+	#	@exception	BluetoothException
+	#	@date 27/09/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)
+	def getVisibility(self):
+		
+		# Check if the bluetooth adapter is ON
+		if self.getPower() is True:
+			
+			# Return the bluetooth visibility status
+			properties= self.adapter.GetProperties()
+			if properties['Discoverable'] == 1:
+				return True
+			else:
+				return False
+				
+		else:
+			raise BluetoothException("The bluetooth adapter is turned off")
+	
+	
+	##
+	#	Method which turns On/Off the bluetooth visibility
+	#	@param visible Indicates if we want to make the bluetooth adapter Visible(True) or Invisible(False)
+	#	@exception	BluetoothException
+	#	@date 27/09/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)
+	def setVisibility(self, visible):
+		
+		try:
+			if (self.getVisibility() is False) and (visible is True): # Set visible
+				self.adapter.SetProperty('Discoverable', visible)
+				self.propertyLoop= gobject.MainLoop()
+				self.propertyLoop.run()
+				
+			elif (self.getVisibility() is True) and (visible is False): # Set invisible
+				self.adapter.SetProperty('Discoverable', visible)
+				self.propertyLoop= gobject.MainLoop()
+				self.propertyLoop.run()
+				
+		except BluetoothException as ex:
+			raise ex
+				
+	
+	##
+	#	Method which will receive all the signals that inform of the value change of the bluetooth adapter properties 
+	#	@param name Name of the property changed
+	#	@param value New value of the property
+	#	@date 27/09/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)			
+	def propertyListener(self, name, value):
+		
+		# Stop the loop
+		self.propertyLoop.quit()
