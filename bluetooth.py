@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+import types
 import gobject
 import subprocess
 import dbus
@@ -23,7 +24,7 @@ class BluetoothException(Exception):
 	#	@version 1.0
 	#	@author ManuelDeveloper (manueldeveloper@gmail.com)
 	def __init__(self, information):
-		self.informacion= information
+		self.information= information
 	
 	
 	##
@@ -32,7 +33,7 @@ class BluetoothException(Exception):
 	#	@version 1.0
 	#	@author ManuelDeveloper (manueldeveloper@gmail.com)	
 	def __str__(self):
-		return repr(self.informacion)
+		return repr(self.information)
 
 
 
@@ -175,6 +176,37 @@ class Bluetooth():
 				
 	
 	##
+	#	Method which returns the ASCII name of the bluetooth adapter
+	#	@retval String with the name of the bluetooth adapter
+	#	@date 27/09/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)
+	def getName(self):
+		
+		# Return the name
+		properties= self.adapter.GetProperties()
+		return properties['Name']
+		
+	
+	##
+	#	Method which sets the ASCII name of the bluetooth adapter
+	#	@param name String with the name of the bluetooth adapter
+	#	@exception BluetoothException
+	#	@date 27/09/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)
+	def setName(self, name):
+
+		# Check if the name is right
+		if type(name) is types.StringType:
+			# Sets the new name
+			self.adapter.SetProperty('Name', name)
+		
+		else:
+			raise BluetoothException("The name has an incorrect type (must be a string)")
+			
+			
+	##
 	#	Method which will receive all the signals that inform of the value change of the bluetooth adapter properties 
 	#	@param name Name of the property changed
 	#	@param value New value of the property
@@ -183,5 +215,5 @@ class Bluetooth():
 	#	@author ManuelDeveloper (manueldeveloper@gmail.com)			
 	def propertyListener(self, name, value):
 		
-		# Stop the loop
+		# Stop the loop needed to update the value of the property
 		self.propertyLoop.quit()
