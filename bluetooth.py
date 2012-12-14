@@ -76,13 +76,17 @@ class Bluetooth():
 		Bluetooth._manager= Bluetooth._systemBus.get_object('org.bluez', '/')
 		interfaceManager= dbus.Interface(Bluetooth._manager, 'org.bluez.Manager')
 		
-		# Obtenemos la referencia al adaptador de bluetooth del dispositivo
+		# Get the reference to the bluetooth adapter
 		try:
 			adapterReference= interfaceManager.DefaultAdapter()			
 			self.adapter= dbus.Interface(Bluetooth._systemBus.get_object('org.bluez', adapterReference), 'org.bluez.Adapter')
 			self.adapter.connect_to_signal('PropertyChanged', self.propertyListener)
+			self.adapter.connect_to_signal('DeviceFound', self.deviceFound)
 		except:
 			raise BluetoothException("The system does not have an bluetooth connection")
+			
+		# Initialize the internal flags
+		self.isDiscovering= False
 			
 			
 			
@@ -216,4 +220,89 @@ class Bluetooth():
 	def propertyListener(self, name, value):
 		
 		# Stop the loop needed to update the value of the property
-		self.propertyLoop.quit()
+		if name != "Discovering":
+			self.propertyLoop.quit()
+		
+	
+	
+	""" Search methods """
+	##
+	#	Method which starts up the search process ()
+	#	@param timeOut Duration in seconds of the search process, by default, are 5s
+	#	@retval List List object whose content are tuples with the information of all devices found (MAC, Name, Type, CoD)
+	#	@retval None If the adapter has not found any device
+	#	@exception BluetoothExecption
+	#	@date 14/12/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)	
+	def search(self, timeOut= 5):
+		
+		# Check if the timeOut is right
+		if type(timeOut) is types.IntType:
+		
+			# Check if there is a search process right now
+			if self.isDiscovering is False:
+				
+				# Set up the internal flags
+				self.devices= []
+				self.isDiscovering= True
+				self.searchLoop= gobject.MainLoop()
+				
+				# Start up the search process
+				self.adapter.StartDiscovery()
+				gobject.timeout_add(timeOut * 1000, self.searchTimeOut)		
+				self.searchLoop.run()
+				
+				# Return the the information
+				if len(self.devices) is 0:
+					return None
+				else:
+					return self.devices
+			
+			else:
+				raise BluetoothException("Right now, there is a search process")
+		else:
+			raise BluetoothException("The timeOut has an incorrect type (must be an int)")
+	
+	
+	##
+	#	Method which will called when the timeout of search process is reached and stops the process
+	#	@date 14/12/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)	
+	def searchTimeOut(self):
+		
+		self.adapter.StopDiscovery()
+		self.isDiscovering= False
+		self.searchLoop.quit()
+		return False
+	
+	
+	##
+	#	Method which will called when the bluetooth adapter find a new device and will save its information in a general list
+	#	@param address Bluetooth MAC of the discovered device
+	#	@param properties Dictionary with all the information about the discovered device
+	#	@date 14/12/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)	
+	def deviceFound(self, address, properties):
+		
+		# First, check if there is a search process running
+		if self.isDiscovering is True:
+			
+			# Get the important information about the discovered device
+			address= properties['Address']
+			cod= properties['Class']
+			
+			if 'Name' in properties:
+				name= properties['Name']
+			else:
+				name= None
+				
+			if 'Icon' in properties:
+				icon= properties['Icon']
+			else:
+				icon= None
+			
+			# Add the information to the general list
+			self.devices.append( (address, name, icon, cod) )
