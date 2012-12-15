@@ -82,6 +82,7 @@ class Bluetooth():
 			self.adapter= dbus.Interface(Bluetooth._systemBus.get_object('org.bluez', adapterReference), 'org.bluez.Adapter')
 			self.adapter.connect_to_signal('PropertyChanged', self.propertyListener)
 			self.adapter.connect_to_signal('DeviceFound', self.deviceFound)
+			Bluetooth._systemBus.add_signal_receiver(self.propertyListenerAD2P, dbus_interface= 'org.bluez.Audio', signal_name='PropertyChanged')
 		except:
 			raise BluetoothException("The system does not have an bluetooth connection")
 			
@@ -306,3 +307,81 @@ class Bluetooth():
 			
 			# Add the information to the general list
 			self.devices.append( (address, name, icon, cod) )
+			
+			
+			
+			
+	""" AD2P methods """
+	##
+	#	Method which starts up the connection process of an AD2P device
+	#	@param address MAC bluetooth address of the audio device
+	#	@retval True If the device is finally connected
+	#	@retval False If the device is not connected
+	#	@exception BluetoothExecption
+	#	@date 15/12/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)	
+	def connectAD2P(self, address):
+		
+		# First, check if the device is registered in the system
+		try:
+			devicePath= self.adapter.FindDevice( address )
+		except:
+			devicePath= None
+	
+		if devicePath is not None:
+			
+			# Check if it is a bluetooth audio device
+			device= dbus.Interface( Bluetooth._systemBus.get_object('org.bluez', devicePath), 'org.bluez.Device' )
+			properties= device.GetProperties()
+			if properties['Icon'].find("audio") != -1:
+				
+				# Check if the device is already connected
+				if properties['Connected'] == 0:
+					
+					# Set the connection with the audio device
+					device= dbus.Interface( Bluetooth._systemBus.get_object('org.bluez', devicePath), 'org.bluez.Audio' )
+					self.deviceConnected= False					
+					self.propertyLoopAD2P= gobject.MainLoop()
+					
+					try:
+						device.Connect()
+						self.propertyLoopAD2P.run()
+					except:
+						self.deviceConnected= False
+
+					
+					return self.deviceConnected
+			
+			else:
+				raise BluetoothException("This is not a bluetooth audio device")
+		else:
+			raise BluetoothException("The device is not registered")
+	
+			
+	##
+	#	Method which will receive all the signals that inform of the state of the AD2P connection process
+	#	@param name Name of the property changed
+	#	@param value New value of the property
+	#	@date 15/09/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)	
+	def propertyListenerAD2P(self, name, value):
+
+		# Check the state of the connection
+		if name == 'State':
+			
+			# The device is correctly connected
+			if value == "connected":
+				self.deviceConnected= True
+				self.propertyLoopAD2P.quit()
+			
+			# The device is not connected for some reason
+			elif value == "disconnected":
+				self.deviceConnected= False
+				self.propertyLoopAD2P.quit()
+			
+			
+			
+			
+	""" Device connection methods """
