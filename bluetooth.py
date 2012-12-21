@@ -88,6 +88,7 @@ class Bluetooth():
 			
 		# Initialize the internal flags
 		self.isDiscovering= False
+		self.isRegistering= False
 			
 			
 			
@@ -221,6 +222,7 @@ class Bluetooth():
 	def propertyListener(self, name, value):
 		
 		# Stop the loop needed to update the value of the property
+		print name
 		if name != "Discovering":
 			self.propertyLoop.quit()
 		
@@ -314,51 +316,39 @@ class Bluetooth():
 	""" AD2P methods """
 	##
 	#	Method which starts up the connection process of an AD2P device
-	#	@param address MAC bluetooth address of the audio device
+	#	@param devicePath String with the BlueZ address of the device
 	#	@retval True If the device is finally connected
 	#	@retval False If the device is not connected
 	#	@exception BluetoothExecption
-	#	@date 15/12/2012
+	#	@date 21/12/2012
 	#	@version 1.0
 	#	@author ManuelDeveloper (manueldeveloper@gmail.com)	
-	def connectAD2P(self, address):
+	def connectAD2P(self, devicePath):
 		
-		# First, check if the device is registered in the system
-		try:
-			devicePath= self.adapter.FindDevice( address )
-		except:
-			devicePath= None
-	
-		if devicePath is not None:
-			
-			# Check if it is a bluetooth audio device
-			device= dbus.Interface( Bluetooth._systemBus.get_object('org.bluez', devicePath), 'org.bluez.Device' )
-			properties= device.GetProperties()
-			if properties['Icon'].find("audio") != -1:
+		# Check if the device is connected
+		device= dbus.Interface( Bluetooth._systemBus.get_object('org.bluez', devicePath), 'org.bluez.Audio' )
+		properties= device.GetProperties()
+		
+		if properties['State'] == "disconnected": # The device is disconnected		
+			self.deviceConnected= False					
+			self.propertyLoopAD2P= gobject.MainLoop()
+					
+			try:
+				device.Connect() # Connect the device
+				self.propertyLoopAD2P.run()
+			except:
+				raise BluetoothException("Error during the connection process")
 				
-				# Check if the device is already connected
-				if properties['Connected'] == 0:
-					
-					# Set the connection with the audio device
-					device= dbus.Interface( Bluetooth._systemBus.get_object('org.bluez', devicePath), 'org.bluez.Audio' )
-					self.deviceConnected= False					
-					self.propertyLoopAD2P= gobject.MainLoop()
-					
-					try:
-						device.Connect()
-						self.propertyLoopAD2P.run()
-					except:
-						self.deviceConnected= False
-
-					
-					return self.deviceConnected
+		elif properties['State'] == "connected": # The device is connected			
+			self.deviceConnected= True
 			
-			else:
-				raise BluetoothException("This is not a bluetooth audio device")
 		else:
-			raise BluetoothException("The device is not registered")
-	
+			raise BluetoothException("The device is busy right now")
 			
+		# Return the result of the connection process	
+		return self.deviceConnected
+	
+	
 	##
 	#	Method which will receive all the signals that inform of the state of the AD2P connection process
 	#	@param name Name of the property changed
@@ -384,4 +374,157 @@ class Bluetooth():
 			
 			
 			
-	""" Device connection methods """
+	""" Input devices methods """
+	##
+	#	Method which starts up the connection process of an bluetooth input device
+	#	@param devicePath String with the BlueZ address of the device
+	#	@retval True If the device is finally connected
+	#	@exception BluetoothExecption
+	#	@date 21/12/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)	
+	def connectInput(self, devicePath):
+		
+		# Check if the device is connected
+		device= dbus.Interface( Bluetooth._systemBus.get_object('org.bluez', devicePath), 'org.bluez.Input' )
+		properties= device.GetProperties()
+		
+		if properties['Connected'] == 0: # The device is disconnected
+		
+			try:
+				device.Connect() # Connect the device
+				self.deviceConnected= True
+			except:
+				raise BluetoothException("Error during the connection process")
+		
+		else: # The device is connected
+			self.deviceConnected= True
+		
+		# Return the result of the connection process	
+		return self.deviceConnected
+
+			
+	""" Connection methods """
+	##
+	#	Method which indicates if the given device is connected or not in the system
+	#	@param address MAC bluetooth address of the device
+	#	@retval True If the device is connected
+	#	@retval False If the device is not connected
+	#	@exception BluetoothException
+	#	@date 21/12/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)
+	def isConnected(self, address):
+		
+		# Check if the device is already registered
+		try:
+			reference= self.adapter.FindDevice( address )
+		except:
+			raise BluetoothException("Unknown device")			
+			
+		# Get the status of the device
+		device= dbus.Interface( Bluetooth._systemBus.get_object('org.bluez', reference), 'org.bluez.Device' )
+		properties= device.GetProperties()
+			
+		# Return the information
+		if properties['Connected'] is 1:
+			return True
+		else:
+			return False
+			
+
+	##
+	#	Method which disconnects the device indicated by its address
+	#	@param address MAC bluetooth address of the device
+	#	@retval True If the device is disconnected
+	#	@retval False If the device is not disconnected
+	#	@exception BluetoothException
+	#	@date 21/12/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)
+	def disconnectDevice(self, address):
+		
+		# Check if the device is already registered
+		try:
+			reference= self.adapter.FindDevice( address )
+		except:
+			raise BluetoothException("Unknown device")
+			
+		# Get the reference to the device
+		device= dbus.Interface( Bluetooth._systemBus.get_object('org.bluez', reference), 'org.bluez.Device' )
+			
+		# Disconnect the device
+		try:
+			device.Disconnect()
+		except:
+			pass
+				
+		return True
+
+				
+	##
+	#	Method which starts up the register process of the bluetooth devices
+	#	@param address MAC bluetooth address of the device
+	#	@retval String with the reference of the device in the system
+	#	@exception BluetoothException
+	#	@date 21/12/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)	
+	def register(self, address):
+		
+		# Check if the device is already registered
+		try:
+			reference= self.adapter.FindDevice( address )
+		except:
+			reference= None
+			
+		if reference == None:
+			
+			# Register the device in the system
+			try:
+				reference= self.adapter.CreateDevice( address )
+			except:
+				raise BluetoothException("Error during the registration process")
+		
+		# Return the result of the registration process
+		return reference
+		
+	
+	##
+	#	Method which connects a bluetooth device with the system
+	#	@param address MAC bluetooth address of the device
+	#	@retval True If the device is finally connected
+	#	@exception BluetoothException
+	#	@date 21/12/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)
+	def connectDevice(self, address):
+		
+		# Check if the device is registered in the system
+		try:
+			reference= self.register( address )
+		except BluetoothException as ex:
+			raise ex
+			
+		# Get the Icon of the device and connect with it according to the gotten icon
+		device= dbus.Interface( Bluetooth._systemBus.get_object('org.bluez', reference), 'org.bluez.Device' )
+		properties= device.GetProperties()
+			
+		# Audio
+		if properties['Icon'].find("audio") != -1:
+			try:
+				print "conectar audio"
+				return self.connectAD2P( reference )					
+			except BluetoothException as ex:					
+				raise ex
+			
+		# Input
+		elif properties['Icon'].find("input") != -1:
+			try:
+				self.connectInput( address )
+			except BluetoothException as ex:
+				raise ex
+			
+		# Error		
+		else:
+			raise BluetoothException("Incorrect device type to set a connection")
