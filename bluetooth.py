@@ -86,9 +86,18 @@ class Bluetooth():
 		except:
 			raise BluetoothException("The system does not have an bluetooth connection")
 			
+		# Get the reference to the session bus
+		Bluetooth._sessionBus= dbus.SessionBus()
+		
+		# Get the reference to the OpenOBEX
+		Bluetooth._managerOBEX= Bluetooth._sessionBus.get_object('org.openobex', '/org/openobex')
+		self.OBEX= dbus.Interface(Bluetooth._managerOBEX, 'org.openobex.Manager')
+		self.OBEX.connect_to_signal('SessionConnected', self.establishedOBEX)
+			
 		# Initialize the internal flags
 		self.isDiscovering= False
 		self.isRegistering= False
+		self.transferState= None
 			
 			
 			
@@ -373,7 +382,6 @@ class Bluetooth():
 			
 			
 			
-			
 	""" Input devices methods """
 	##
 	#	Method which starts up the connection process of an bluetooth input device
@@ -402,6 +410,7 @@ class Bluetooth():
 		
 		# Return the result of the connection process	
 		return self.deviceConnected
+
 
 			
 	""" Connection methods """
@@ -528,3 +537,141 @@ class Bluetooth():
 		# Error		
 		else:
 			raise BluetoothException("Incorrect device type to set a connection")
+
+
+			
+	""" File transfering methods """
+	##
+	#	Method which sends a file over OPP bluetooth protocol
+	#	@param address MAC bluetooth address of the device that will receive the file
+	#	@param pathFile Path of the file
+	#	@param label gtk.Label object used to indicate the progress of the sending process (by default, None)
+	#	@pararm progressBar gtk.ProgressBar object used to indicate the progress of the sending process (by default, None)
+	#	@retval True 
+	#	@exception BluetoothException
+	#	@date 21/12/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)
+	def sendFile(self, address, pathFile, label= None, progressBar= None):
+		
+		# Check if there is other sending process
+		if self.transferState is None:
+			
+			# Indicate that there is one transfering in process
+			self.transferState= 'send'
+			
+			# Create an internal reference for the file's path, label and progressBar
+			self.pathFile= pathFile
+			self.label= label
+			self.progressBar= progressBar
+			
+			# Create a session with the device
+			try:
+				self.pathSession= self.OBEX.CreateBluetoothSession(address, '00:00:00:00:00:00', 'opp')
+			except:
+				raise BluetoothException("The device don't accept this kind of connection")
+				
+			# Get the information about the connection
+			self.OBEXSession= dbus.Interface(Bluetooth._sessionBus.get_object('org.openobex', self.pathSession) , 'org.openobex.Session')
+			
+			# Indicate the methods which will receive all the signals
+			self.OBEXSession.connect_to_signal('TransferStarted', self.startOBEX)
+			self.OBEXSession.connect_to_signal('TransferProgress', self.progressOBEX)
+			self.OBEXSession.connect_to_signal('TransferCompleted', self.endOBEX)
+			self.OBEXSession.connect_to_signal('ErrorOccurred', self.errorOBEX)
+			self.OBEXSession.connect_to_signal('Cancelled', self.cancelOBEX)
+			
+			# Start the transfering process
+			self.loopOBEX= gobject.MainLoop()
+			self.loopOBEX.run()
+			
+			# Return the result of the transfering process
+			if self.transferState == "sended":
+				self.transferState= None
+				return True
+			
+			elif self.transferState == "error":
+				self.transferState= None
+				raise BluetoothException("Error during the transfering process")
+				
+			elif self.transferState == "cancel": 
+				self.transferState= None
+				raise BluetoothException("The transfering process have been cancelled")
+				
+			elif self.transferState == "timeout":
+				self.transferState = None
+				raise BluetoothException("Request timeout")
+		else:
+			raise BluetoothException("There is another sending process in action")
+			
+	
+	##
+	#	Method which receives the signal when the OBEX connection will be established
+	#	@param path D-Bus reference of the connection
+	#	@date 21/12/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)		
+	def establishedOBEX(self, path):
+		
+		# Check if the right session
+		if path == self.pathSession:			
+			self.OBEXSession.SendFile(self.pathFile)
+			
+	
+	##
+	#	Method which receives the signal when the transfer has begun
+	#	@param filename Name of the file
+	#	@param local_path Path of the file
+	#	@param total_bytes Size of the file in bytes
+	#	@date 21/12/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)	
+	def startOBEX(self, filename, local_path, total_bytes):
+		
+		if self.transferState == 'send':
+			print "Sending: ", filename
+			self.sizeFile= total_bytes
+	
+	
+	##
+	#	Method which receives the signal when a bluetooth packet is transfered
+	#	@param transfered Sent bytes
+	#	@date 21/12/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)	
+	def progressOBEX(self, transferred):
+		print "progress: ", (float(transferred)/float(self.sizeFile)) * 100
+	
+	
+	##
+	#	Method which receives the signal when the transfer is ended
+	#	@date 21/12/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)		
+	def endOBEX(self):
+		self.transferState= "sended"
+		self.loopOBEX.quit()
+	
+	
+	##
+	#	Method which receives the signal when an error appears during the transfering 
+	#	@date 21/12/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)	
+	def errorOBEX(self, name_error, message_error):
+		if message_error == 'Request timeout':
+			self.transferState= "timeout"
+		else:
+			self.transferState= "error"
+			
+		self.loopOBEX.quit()
+	
+	
+	##
+	#	Method which receives the signal when the transfering is cancelled
+	#	@date 21/12/2012
+	#	@version 1.0
+	#	@author ManuelDeveloper (manueldeveloper@gmail.com)	
+	def cancelOBEX(self):
+		self.transferState= "cancel"
+		self.loopOBEX.quit()		
