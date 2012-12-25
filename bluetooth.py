@@ -110,7 +110,7 @@ class Bluetooth():
 	##
 	#	Method which checks if the bluetooth adapter is On or Off
 	#	@retval True if the adapter is ON
-	#	@retval False if the adapter if OFF
+	#	@retval False if the adapter is OFF
 	#	@date 27/09/2012
 	#	@version 1.0
 	#	@author ManuelDeveloper (manueldeveloper@gmail.com)
@@ -247,7 +247,7 @@ class Bluetooth():
 	
 	""" Search methods """
 	##
-	#	Method which starts up the search process ()
+	#	Method which starts up the search process
 	#	@param timeOut Duration in seconds of the search process, by default, are 5s
 	#	@retval List List object whose content are tuples with the information of all devices found (MAC, Name, Type, CoD)
 	#	@retval None If the adapter has not found any device
@@ -554,7 +554,7 @@ class Bluetooth():
 	#	@param address MAC bluetooth address of the device that will receive the file
 	#	@param pathFile Path of the file
 	#	@pararm progressBar gtk.ProgressBar object used to indicate the progress of the sending process (by default, None)
-	#	@retval True 
+	#	@retval True If the file is finally sended
 	#	@exception BluetoothException
 	#	@date 21/12/2012
 	#	@version 1.0
@@ -627,7 +627,7 @@ class Bluetooth():
 	##
 	#	Method which receives a file over OPP bluetooth protocol
 	#	@pararm progressBar gtk.ProgressBar object used to indicate the progress of the sending process (by default, None)
-	#	@retval True 
+	#	@retval True If the file is finally received
 	#	@exception BluetoothException
 	#	@date 23/12/2012
 	#	@version 1.0
@@ -758,7 +758,9 @@ class Bluetooth():
 	
 	
 	##
-	#	Method which receives the signal when an error appears during the transfering 
+	#	Method which receives the signal when an error appears during the transfering
+	#	@param name_error Name of the error
+	#	@param message_error Message of the error
 	#	@date 21/12/2012
 	#	@version 1.0
 	#	@author ManuelDeveloper (manueldeveloper@gmail.com)	
